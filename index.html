@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Flappy Plane</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=swap');
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: "DM Sans", sans-serif;
+      background: black;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #resetBtn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      border: 1px solid white;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(12px);
+      font-size: 18px;
+      color: white;
+      cursor: pointer;
+      display: none;
+      border-radius: 10px;
+    }
+
+    #logoPlaceholder {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 80px;
+      height: 40px;
+      border: 1px solid white;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="logoPlaceholder">LOGO</div>
+  <button id="resetBtn">Reset Game</button>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const planeImg = new Image();
+    planeImg.src = './assets/plane.png';
+
+    const skyImg = new Image();
+    skyImg.src = './assets/sky.png';
+
+    let plane, pipes, score, frameCount, startTime, started, gameOver;
+    let imagesLoaded = 0;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    function initGame() {
+      resizeCanvas();
+
+      plane = {
+        x: canvas.width * 0.2,
+        y: canvas.height / 2,
+        width: 40,
+        height: 30,
+        gravity: 0.2,
+        lift: -4,
+        velocity: 0
+      };
+
+      pipes = [];
+      score = 0;
+      gameOver = false;
+      frameCount = 0;
+      started = false;
+      startTime = Date.now();
+      resetBtn.style.display = 'none';
+
+      requestAnimationFrame(update);
+    }
+
+    window.addEventListener('resize', () => {
+      resizeCanvas();
+      if (!started) update();
+    });
+
+    document.addEventListener('keydown', () => {
+      if (started && !gameOver) {
+        plane.velocity = plane.lift;
+      } else if (!started) {
+        started = true;
+        startTime = Date.now();
+      }
+    });
+
+    canvas.addEventListener('click', () => {
+      if (started && !gameOver) {
+        plane.velocity = plane.lift;
+      } else if (!started) {
+        started = true;
+        startTime = Date.now();
+      }
+    });
+
+    resetBtn.addEventListener('click', initGame);
+
+    function drawPlane() {
+      ctx.drawImage(planeImg, plane.x, plane.y, plane.width, plane.height);
+    }
+
+    function drawPipe(pipe) {
+      const x = pipe.x;
+      const w = pipe.width;
+      const pipeColor = '#FF9800';
+      const pipeCapColor = '#EF6C00';
+      const capHeight = 15;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(255, 152, 0, 0.3)';
+      ctx.shadowBlur = 10;
+
+      ctx.fillStyle = pipeColor;
+      ctx.fillRect(x, 0, w, pipe.top);
+      ctx.fillStyle = pipeCapColor;
+      ctx.fillRect(x - 4, pipe.top - capHeight, w + 8, capHeight);
+
+      ctx.fillStyle = pipeColor;
+      ctx.fillRect(x, pipe.bottom, w, canvas.height - pipe.bottom);
+      ctx.fillStyle = pipeCapColor;
+      ctx.fillRect(x - 4, pipe.bottom, w + 8, capHeight);
+
+      ctx.restore();
+    }
+
+    function drawGlassBox(x, y, width, height, radius = 20) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.clip();
+
+      ctx.filter = 'blur(8px)';
+      ctx.drawImage(skyImg, 0, 0, canvas.width, canvas.height);
+      ctx.filter = 'none';
+
+      const gradient = ctx.createLinearGradient(x, y, x, y + height);
+      gradient.addColorStop(0, 'rgba(255,255,255,0.25)');
+      gradient.addColorStop(1, 'rgba(255,255,255,0.05)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x, y, width, height);
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.strokeRect(x, y, width, height);
+
+      ctx.restore();
+    }
+
+    function update() {
+      ctx.drawImage(skyImg, 0, 0, canvas.width, canvas.height);
+
+      if (!started) {
+        const boxWidth = 340;
+        const boxHeight = 100;
+        const boxX = canvas.width / 2 - boxWidth / 2;
+        const boxY = canvas.height / 2 - boxHeight / 2;
+
+        drawGlassBox(boxX, boxY, boxWidth, boxHeight);
+
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = '36px "DM Sans", sans-serif';
+        ctx.fillText('Flappy Plane', canvas.width / 2, canvas.height / 2 - 10);
+        ctx.font = '20px "DM Sans", sans-serif';
+        ctx.fillText('Tap or press any key to start', canvas.width / 2, canvas.height / 2 + 25);
+
+        requestAnimationFrame(update);
+        return;
+      }
+
+      if (!gameOver) {
+        plane.velocity += plane.gravity;
+        plane.y += plane.velocity;
+        drawPlane();
+
+        if (frameCount % 110 === 0) {
+          const totalHeight = canvas.height;
+          const gap = totalHeight * 0.28;
+          const minTop = totalHeight * 0.1;
+          const maxTop = totalHeight - gap - totalHeight * 0.1;
+          const top = Math.random() * (maxTop - minTop) + minTop;
+          const bottom = top + gap;
+
+          pipes.push({
+            x: canvas.width * 0.65,
+            width: 60,
+            top: top,
+            bottom: bottom
+          });
+        }
+
+        pipes.forEach((pipe, index) => {
+          pipe.x -= 2;
+          drawPipe(pipe);
+
+          if (
+            plane.x < pipe.x + pipe.width &&
+            plane.x + plane.width > pipe.x &&
+            (plane.y < pipe.top || plane.y + plane.height > pipe.bottom)
+          ) {
+            gameOver = true;
+            resetBtn.style.display = 'block';
+          }
+
+          if (!pipe.scored && pipe.x + pipe.width < plane.x) {
+            score++;
+            pipe.scored = true;
+          }
+
+          if (pipe.x + pipe.width < 0) {
+            pipes.splice(index, 1);
+          }
+        });
+
+        if (plane.y + plane.height > canvas.height || plane.y < 0) {
+          gameOver = true;
+          resetBtn.style.display = 'block';
+        }
+
+        drawGlassBox(10, 10, 130, 40, 8);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'left';
+        ctx.font = '20px "DM Sans", sans-serif';
+        ctx.fillText(`Score: ${score}`, 20, 38);
+
+        frameCount++;
+        requestAnimationFrame(update);
+      } else {
+        const boxWidth = 300;
+        const boxHeight = 100;
+        const boxX = canvas.width / 2 - boxWidth / 2;
+        const boxY = canvas.height / 2 - boxHeight / 2;
+
+        drawGlassBox(boxX, boxY, boxWidth, boxHeight);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = '36px "DM Sans", sans-serif';
+        ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 10);
+        ctx.font = '24px "DM Sans", sans-serif';
+        ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
+      }
+    }
+
+    function checkAllImagesLoaded() {
+      imagesLoaded++;
+      if (imagesLoaded === 2) {
+        initGame();
+      }
+    }
+
+    planeImg.onload = checkAllImagesLoaded;
+    skyImg.onload = checkAllImagesLoaded;
+  </script>
+</body>
+</html>
