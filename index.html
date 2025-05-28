@@ -38,27 +38,28 @@
       border-radius: 10px;
     }
 
-    #logoPlaceholder {
-      position: absolute;
-      top: 20px;
-      right: 20px;
-      width: 80px;
-      height: 40px;
-      border: 1px solid white;
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(8px);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      color: white;
-    }
+#logoPlaceholder {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 0;
+  margin: 0;
+  width: auto;
+  height: auto;
+  z-index: 1000; /* ensures it's on top */
+}
+
+#logoPlaceholder img {
+  max-width: 100px; /* adjust as needed */
+  height: auto;
+  display: block;
+}
+
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-  <div id="logoPlaceholder">LOGO</div>
+  <div id="logoPlaceholder"><img src="./assets/Logo-01.png" alt="French Valley logoPlaceholder"></div>
   <button id="resetBtn">Reset Game</button>
 
   <script>
