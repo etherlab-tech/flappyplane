@@ -1,299 +1,296 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Flappy Plane</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Flappy Plane Game</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=swap');
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      font-family: "DM Sans", sans-serif;
-      background: black;
-    }
-
-    canvas {
-      display: block;
-      width: 100vw;
-      height: 100vh;
-    }
-
-    #resetBtn {
-      position: absolute;
-      bottom: 20px;
-      right: 20px;
-      padding: 10px 20px;
-      border: 1px solid white;
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(12px);
-      font-size: 18px;
-      color: white;
-      cursor: pointer;
-      display: none;
-      border-radius: 10px;
-    }
-
-#logoPlaceholder {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  padding: 0;
-  margin: 0;
-  width: auto;
-  height: auto;
-  z-index: 1000; /* ensures it's on top */
-}
-
-#logoPlaceholder img {
-  max-width: 100px; /* adjust as needed */
-  height: auto;
-  display: block;
-}
-
+    @import url('https://fonts.googleapis.com/css2?family=Fustat:wght@200..800&family=Gajraj+One&display=swap');
+    html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:black}
+    #gameContainer{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;justify-content:center;align-items:center;background:black}
+    #gameCanvas{width:2160px;height:3840px;max-width:100%;max-height:100%;width:auto;height:auto;display:block}
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  <div id="logoPlaceholder"><img src="./assets/Logo-01.png" alt="French Valley logoPlaceholder"></div>
-  <button id="resetBtn">Reset Game</button>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="2160" height="3840"></canvas>
+  </div>
 
   <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const resetBtn = document.getElementById('resetBtn');
+  // —— TUNE DYNAMIC SPEED HERE —— 
+  const BASE_SPEED       = 0.0035;
+  const SPEED_UP_FACTOR  = 0.0005;
+  const SPEEDUP_EVERY    = 2;
+  // —— SPAWN RATE TUNING —— 
+  const BASE_SPAWN_RATE  = 120,
+        MIN_SPAWN_RATE   = 40,
+        SPAWN_DECREMENT  = 20;
+  // —— COLLISION INSETS —— 
+  const TOP_COLLISION_INSET_X = 0.15,
+        TOP_COLLISION_INSET_Y = 0.25,
+        BOT_COLLISION_INSET_X = 0.10,
+        BOT_COLLISION_INSET_Y = 0.20,
+        DEBUG_COLLISION       = false;
+  const GAP = 0.28;
+  // —— LOGO DRAW SETTINGS —— 
+  const LOGO_SCALE   = 0.25;   // fraction of canvas width
+  const LOGO_MARGIN  = 100;    // px from top/right
+  // —— SCORE MARGIN —— 
+  const SCORE_MARGIN = 80;     // px inset from left
+  // ——————————————————————————————————
 
-    const planeImg = new Image();
-    planeImg.src = './assets/plane.png';
+  function loadImage(src){
+    return new Promise(res=>{
+      const img = new Image();
+      img.onload  = ()=>res(img);
+      img.onerror = ()=>{ console.warn('Failed to load', src); res(img); };
+      img.src = src;
+    });
+  }
 
-    const skyImg = new Image();
-    skyImg.src = './assets/sky.png';
+  (async()=>{
+    const planeImg   = await loadImage('./assets/plane-01.png');
+    const skyImg     = await loadImage('./assets/sky-01.png');
+    const buttonImg  = await loadImage('./assets/button.png');
+    const logoImg    = await loadImage('./assets/Logo-01.png');
 
-    let plane, pipes, score, frameCount, startTime, started, gameOver;
-    let imagesLoaded = 0;
+    const bottomPaths = [
+      './assets/bottom1.png','./assets/bottom2.png','./assets/bottom3.png',
+      './assets/bottom4.png','./assets/bottom5.png','./assets/bottom6.png'
+    ];
+    const topPaths = [
+      './assets/top1.png','./assets/top2.png','./assets/top3.png','./assets/top4.png'
+    ];
 
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
+    const bottomAll  = await Promise.all(bottomPaths.map(loadImage));
+    const topAll     = await Promise.all(topPaths   .map(loadImage));
+    const bottomImgs = bottomAll.filter(i=>i.naturalWidth>0);
+    const topImgs    = topAll   .filter(i=>i.naturalWidth>0);
 
-    function initGame() {
-      resizeCanvas();
+    startGame({ planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs });
+  })();
 
+  function startGame({planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs}){
+    const canvas = document.getElementById('gameCanvas'),
+          ctx    = canvas.getContext('2d');
+
+    let plane, obstacles, score, frameCount;
+    let started, gameOver, showCountdown, countdownStart, bgOffset;
+
+    function initGame(){
       plane = {
-        x: canvas.width * 0.2,
-        y: canvas.height / 2,
-        width: 100,
-        height: 70,
-        gravity: 0.2,
-        lift: -4,
-        velocity: 0
+        x: 2160*0.2, y: 3840*0.5,
+        width: 2160*0.10, height: 3840*0.065,
+        gravity:0.2, lift:-10, vel:0
       };
-
-      pipes = [];
-      score = 0;
-      gameOver = false;
-      frameCount = 0;
-      started = false;
-      startTime = Date.now();
-      resetBtn.style.display = 'none';
-
-      requestAnimationFrame(update);
+      obstacles     = [];
+      score         = 0;
+      frameCount    = 0;
+      started       = false;
+      gameOver      = false;
+      showCountdown = false;
+      countdownStart= 0;
+      bgOffset      = 0;
+      // two initial, staggered
+      spawnObstacle();
+      obstacles[0].x += 2160*0.5;
+      spawnObstacle();
     }
 
-    window.addEventListener('resize', () => {
-      resizeCanvas();
-      if (!started) update();
+    document.addEventListener('keydown', e=>{
+      if(e.code==='Space') e.preventDefault();
+      handleTap();
     });
-
-    document.addEventListener('keydown', () => {
-      if (started && !gameOver) {
-        plane.velocity = plane.lift;
-      } else if (!started) {
-        started = true;
-        startTime = Date.now();
-      }
-    });
-
-    canvas.addEventListener('click', () => {
-      if (started && !gameOver) {
-        plane.velocity = plane.lift;
-      } else if (!started) {
-        started = true;
-        startTime = Date.now();
-      }
-    });
-
-    resetBtn.addEventListener('click', initGame);
-
-    function drawPlane() {
-      ctx.drawImage(planeImg, plane.x, plane.y, plane.width, plane.height);
-    }
-
-    function drawPipe(pipe) {
-      const x = pipe.x;
-      const w = pipe.width;
-      const pipeColor = '#FF9800';
-      const pipeCapColor = '#EF6C00';
-      const capHeight = 15;
-
-      ctx.save();
-      ctx.shadowColor = 'rgba(255, 152, 0, 0.3)';
-      ctx.shadowBlur = 10;
-
-      ctx.fillStyle = pipeColor;
-      ctx.fillRect(x, 0, w, pipe.top);
-      ctx.fillStyle = pipeCapColor;
-      ctx.fillRect(x - 4, pipe.top - capHeight, w + 8, capHeight);
-
-      ctx.fillStyle = pipeColor;
-      ctx.fillRect(x, pipe.bottom, w, canvas.height - pipe.bottom);
-      ctx.fillStyle = pipeCapColor;
-      ctx.fillRect(x - 4, pipe.bottom, w + 8, capHeight);
-
-      ctx.restore();
-    }
-
-    function drawGlassBox(x, y, width, height, radius = 20) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(x + radius, y);
-      ctx.lineTo(x + width - radius, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-      ctx.lineTo(x + width, y + height - radius);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      ctx.lineTo(x + radius, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-      ctx.lineTo(x, y + radius);
-      ctx.quadraticCurveTo(x, y, x + radius, y);
-      ctx.closePath();
-      ctx.clip();
-
-      ctx.filter = 'blur(8px)';
-      ctx.drawImage(skyImg, 0, 0, canvas.width, canvas.height);
-      ctx.filter = 'none';
-
-      const gradient = ctx.createLinearGradient(x, y, x, y + height);
-      gradient.addColorStop(0, 'rgba(255,255,255,0.25)');
-      gradient.addColorStop(1, 'rgba(255,255,255,0.05)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(x, y, width, height);
-
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.strokeRect(x, y, width, height);
-
-      ctx.restore();
-    }
-
-    function update() {
-      ctx.drawImage(skyImg, 0, 0, canvas.width, canvas.height);
-
-      if (!started) {
-        const boxWidth = 340;
-        const boxHeight = 100;
-        const boxX = canvas.width / 2 - boxWidth / 2;
-        const boxY = canvas.height / 2 - boxHeight / 2;
-
-        drawGlassBox(boxX, boxY, boxWidth, boxHeight);
-
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.font = '36px "DM Sans", sans-serif';
-        ctx.fillText('Flappy Plane', canvas.width / 2, canvas.height / 2 - 10);
-        ctx.font = '20px "DM Sans", sans-serif';
-        ctx.fillText('Tap or press any key to start', canvas.width / 2, canvas.height / 2 + 25);
-
-        requestAnimationFrame(update);
-        return;
-      }
-
-      if (!gameOver) {
-        plane.velocity += plane.gravity;
-        plane.y += plane.velocity;
-        drawPlane();
-
-        if (frameCount % 260 === 0) {
-          const totalHeight = canvas.height;
-          const gap = totalHeight * 0.28;
-          const minTop = totalHeight * 0.1;
-          const maxTop = totalHeight - gap - totalHeight * 0.1;
-          const top = Math.random() * (maxTop - minTop) + minTop;
-          const bottom = top + gap;
-
-          pipes.push({
-            x: canvas.width * 0.45,
-            width: 60,
-            top: top,
-            bottom: bottom
-          });
-        }
-
-        pipes.forEach((pipe, index) => {
-          pipe.x -= 2;
-          drawPipe(pipe);
-
-          if (
-            plane.x < pipe.x + pipe.width &&
-            plane.x + plane.width > pipe.x &&
-            (plane.y < pipe.top || plane.y + plane.height > pipe.bottom)
-          ) {
-            gameOver = true;
-            resetBtn.style.display = 'block';
-          }
-
-          if (!pipe.scored && pipe.x + pipe.width < plane.x) {
-            score++;
-            pipe.scored = true;
-          }
-
-          if (pipe.x + pipe.width < 0) {
-            pipes.splice(index, 1);
-          }
-        });
-
-        if (plane.y + plane.height > canvas.height || plane.y < 0) {
-          gameOver = true;
-          resetBtn.style.display = 'block';
-        }
-
-        drawGlassBox(10, 10, 130, 40, 8);
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'left';
-        ctx.font = '20px "DM Sans", sans-serif';
-        ctx.fillText(`Score: ${score}`, 20, 38);
-
-        frameCount++;
-        requestAnimationFrame(update);
-      } else {
-        const boxWidth = 300;
-        const boxHeight = 100;
-        const boxX = canvas.width / 2 - boxWidth / 2;
-        const boxY = canvas.height / 2 - boxHeight / 2;
-
-        drawGlassBox(boxX, boxY, boxWidth, boxHeight);
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.font = '36px "DM Sans", sans-serif';
-        ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 10);
-        ctx.font = '24px "DM Sans", sans-serif';
-        ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 30);
-      }
-    }
-
-    function checkAllImagesLoaded() {
-      imagesLoaded++;
-      if (imagesLoaded === 2) {
+    canvas.addEventListener('click', handleTap);
+    function handleTap(){
+      if(!started && !showCountdown){
+        showCountdown  = true;
+        countdownStart = performance.now();
+      } else if(started && !gameOver){
+        plane.vel = plane.lift;
+      } else if(gameOver){
         initGame();
       }
     }
 
-    planeImg.onload = checkAllImagesLoaded;
-    skyImg.onload = checkAllImagesLoaded;
+    function drawText(txt,x,y,sz,font,align){
+      ctx.save();
+      ctx.font        = `${sz}px "${font}",sans-serif`;
+      ctx.textAlign   = align;
+      ctx.lineJoin    = 'round';
+      ctx.lineWidth   = 3;
+      ctx.fillStyle   = 'white';
+      ctx.strokeStyle = 'black';
+      ctx.shadowOffsetX=0; ctx.shadowOffsetY=4; ctx.shadowBlur=30;
+      ctx.shadowColor ='rgba(0,0,0,0.66)';
+      ctx.fillText(txt,x,y);
+      ctx.strokeText(txt,x,y);
+      ctx.restore();
+    }
+
+    function drawBackground(){
+      const tw = skyImg.naturalWidth * (3840/skyImg.naturalHeight);
+      bgOffset = (bgOffset - 1) % tw;
+      if(bgOffset>0) bgOffset -= tw;
+      const x0 = Math.floor(bgOffset);
+      ctx.save(); ctx.shadowBlur=0;
+      for(let x=x0-tw; x<2160; x+=tw){
+        ctx.drawImage(skyImg,
+          0,0, skyImg.naturalWidth, skyImg.naturalHeight,
+          x,0, tw,3840
+        );
+      }
+      ctx.restore();
+    }
+
+    function drawPlane(){
+      ctx.drawImage(planeImg, plane.x, plane.y, plane.width, plane.height);
+    }
+
+    function spawnObstacle(){
+      const H        = 3840,
+            gap      = H*GAP,
+            m        = H*0.10,
+            topY     = Math.random()*(H-gap-2*m)+m,
+            bottomH  = H-(topY+gap),
+            topImg   = topImgs[Math.floor(Math.random()*topImgs.length)],
+            bottomImg= bottomImgs[Math.floor(Math.random()*bottomImgs.length)];
+
+      obstacles.push({ x:2160+60, topY, gap, bottomH, topImg, bottomImg, scored:false });
+    }
+
+    function rectsIntersect(a,b){
+      return a.x < b.x + b.w &&
+             a.x + a.w > b.x &&
+             a.y < b.y + b.h &&
+             a.y + a.h > b.y;
+    }
+
+    function loop(){
+      requestAnimationFrame(loop);
+
+      // background
+      drawBackground();
+
+      // logo (inside canvas)
+      const logoW = 2160 * LOGO_SCALE,
+            logoH = logoW * (logoImg.naturalHeight/logoImg.naturalWidth),
+            logoX = 2160 - LOGO_MARGIN - logoW,
+            logoY = LOGO_MARGIN;
+      ctx.drawImage(logoImg, logoX, logoY, logoW, logoH);
+
+      // Game Over
+      if(gameOver){
+        drawText('Game Over', 2160/2, 3840*0.45, 128,'Gajraj One','center');
+        drawText(`Final Score: ${score}`,
+                 2160/2, 3840*0.70, 120,'Gajraj One','center');
+        return;
+      }
+
+      // pre-start / countdown
+      if(!started){
+        if(showCountdown){
+          const t = (performance.now()-countdownStart)/1000,
+                n = t<3?Math.ceil(3-t):0;
+          drawText(n>0?String(n):'Go!', 2160/2, 3840/2, 200,'Gajraj One','center');
+          if(t>=3) started=true;
+        } else {
+          drawText('Flappy Plane Game',
+                   2160/2, 3840*0.45, 150,'Gajraj One','center');
+          const phase = (performance.now()%5000)/5000*2*Math.PI,
+                alpha = 0.5+0.5*Math.sin(phase);
+          ctx.save(); ctx.globalAlpha=alpha;
+          const bw = 2160*0.15,
+                bh = bw*(buttonImg.naturalHeight/buttonImg.naturalWidth),
+                bx = (2160-bw)/2,
+                by = 3840*0.80 - bh/2;
+          ctx.drawImage(buttonImg,bx,by,bw,bh);
+          ctx.restore();
+          drawText('Press button to start',
+                   2160/2, 3840*0.90, 120,'Gajraj One','center');
+        }
+        return;
+      }
+
+      // gameplay
+      plane.vel += plane.gravity;
+      plane.y   += plane.vel;
+      drawPlane();
+      if(plane.y<0||plane.y+plane.height>3840) gameOver=true;
+
+      // spawn interval
+      const interval = Math.max(
+        MIN_SPAWN_RATE,
+        BASE_SPAWN_RATE - Math.floor(score/SPEEDUP_EVERY)*SPAWN_DECREMENT
+      );
+      if(frameCount>0 && frameCount%interval===0) spawnObstacle();
+
+      // obstacles
+      obstacles.forEach((o,i)=>{
+        const W = 2160*0.08,
+              speedFactor = BASE_SPEED + Math.floor(score/SPEEDUP_EVERY)*SPEED_UP_FACTOR;
+        o.x -= 2160 * speedFactor;
+
+        // top
+        const hT = W*(o.topImg.naturalHeight/o.topImg.naturalWidth),
+              tX = o.x, tY = o.topY - hT;
+        if(o.topImg.naturalWidth) ctx.drawImage(o.topImg,tX,tY,W,hT);
+        const topRect = {
+          x:tX+W*TOP_COLLISION_INSET_X,
+          y:tY+hT*TOP_COLLISION_INSET_Y,
+          w:W-2*W*TOP_COLLISION_INSET_X,
+          h:hT-2*hT*TOP_COLLISION_INSET_Y
+        };
+
+        // bottom
+        const bH = o.bottomH,
+              bW = bH*(o.bottomImg.naturalWidth/o.bottomImg.naturalHeight),
+              bX = o.x, bY = 3840 - bH;
+        if(o.bottomImg.naturalWidth) ctx.drawImage(o.bottomImg,bX,bY,bW,bH);
+        const botRect = {
+          x:bX+bW*BOT_COLLISION_INSET_X,
+          y:bY+bH*BOT_COLLISION_INSET_Y,
+          w:bW-2*bW*BOT_COLLISION_INSET_X,
+          h:bH-2*bH*BOT_COLLISION_INSET_Y
+        };
+
+        if(DEBUG_COLLISION){
+          ctx.save();
+          ctx.strokeStyle='red'; ctx.lineWidth=2;
+          ctx.strokeRect(topRect.x,topRect.y,topRect.w,topRect.h);
+          ctx.strokeRect(botRect.x,botRect.y,botRect.w,botRect.h);
+          ctx.restore();
+        }
+
+        if(!o.scored && o.x+W<plane.x){
+          score++; o.scored=true;
+        }
+
+        const planeRect={x:plane.x,y:plane.y,w:plane.width,h:plane.height};
+        if(rectsIntersect(planeRect,topRect)||rectsIntersect(planeRect,botRect)){
+          gameOver=true;
+        }
+
+        if(o.x+W<0) obstacles.splice(i,1);
+      });
+
+      // live score aligned with logo
+      const fs = Math.floor(3840*0.04);
+      drawText(`Score: ${score}`,
+               SCORE_MARGIN,
+               LOGO_MARGIN + fs,
+               fs,'Gajraj One','left');
+
+      frameCount++;
+    }
+
+    initGame();
+    requestAnimationFrame(loop);
+  }
   </script>
 </body>
 </html>
+
+
+
