@@ -18,70 +18,67 @@
   </div>
 
   <script>
-  // —— TUNE DYNAMIC SPEED HERE —— 
+  // —— CONFIG —— 
   const BASE_SPEED       = 0.0035;
   const SPEED_UP_FACTOR  = 0.0005;
   const SPEEDUP_EVERY    = 2;
-  // —— SPAWN RATE TUNING —— 
-  const BASE_SPAWN_RATE  = 120,
-        MIN_SPAWN_RATE   = 40,
-        SPAWN_DECREMENT  = 20;
-  // —— COLLISION INSETS —— 
-  const TOP_COLLISION_INSET_X = 0.15,
-        TOP_COLLISION_INSET_Y = 0.25,
-        BOT_COLLISION_INSET_X = 0.10,
-        BOT_COLLISION_INSET_Y = 0.20,
-        DEBUG_COLLISION       = false;
+  const BASE_SPAWN_RATE  = 120, MIN_SPAWN_RATE = 40, SPAWN_DECREMENT = 20;
   const GAP = 0.28;
-  // —— LOGO DRAW SETTINGS —— 
-  const LOGO_SCALE   = 0.25;   // fraction of canvas width
-  const LOGO_MARGIN  = 100;    // px from top/right
-  // —— SCORE MARGIN —— 
-  const SCORE_MARGIN = 80;     // px inset from left
-  // ——————————————————————————————————
+  const LOGO_SCALE   = 0.25, LOGO_MARGIN  = 100;
+  const SCORE_MARGIN = 80;
+  const TOP_INSET_X=0.15, TOP_INSET_Y=0.25, BOT_INSET_X=0.10, BOT_INSET_Y=0.20;
+  const DEBUG_COLLISION=false;
 
   function loadImage(src){
     return new Promise(res=>{
-      const img = new Image();
-      img.onload  = ()=>res(img);
-      img.onerror = ()=>{ console.warn('Failed to load', src); res(img); };
-      img.src = src;
+      const img=new Image();
+      img.onload=()=>res(img);
+      img.onerror=()=>{console.warn('Failed to load',src);res(img)};
+      img.src=src;
     });
   }
 
   (async()=>{
-    const planeImg   = await loadImage('./assets/plane-01.png');
-    const skyImg     = await loadImage('./assets/sky-01.png');
-    const buttonImg  = await loadImage('./assets/button.png');
-    const logoImg    = await loadImage('./assets/Logo-01.png');
+    const [planeImg, skyImg, buttonImg, logoImg] = await Promise.all([
+      loadImage('./assets/plane-01.png'),
+      loadImage('./assets/sky-01.png'),
+      loadImage('./assets/button.png'),
+      loadImage('./assets/Logo-01.png')
+    ]);
 
-    const bottomPaths = [
-      './assets/bottom1.png','./assets/bottom2.png','./assets/bottom3.png',
-      './assets/bottom4.png','./assets/bottom5.png','./assets/bottom6.png'
+    // only bottom1–3 now
+    const bottomPaths=[
+      './assets/bottom1.png',
+      './assets/bottom2.png',
+      './assets/bottom3.png'
     ];
-    const topPaths = [
+    const topPaths=[
       './assets/top1.png','./assets/top2.png','./assets/top3.png','./assets/top4.png'
     ];
 
-    const bottomAll  = await Promise.all(bottomPaths.map(loadImage));
-    const topAll     = await Promise.all(topPaths   .map(loadImage));
-    const bottomImgs = bottomAll.filter(i=>i.naturalWidth>0);
-    const topImgs    = topAll   .filter(i=>i.naturalWidth>0);
+    const bottomAll = await Promise.all(bottomPaths.map(loadImage));
+    const topAll    = await Promise.all(topPaths   .map(loadImage));
+    const bottomImgs= bottomAll.filter(i=>i.naturalWidth>0);
+    const topImgs   = topAll   .filter(i=>i.naturalWidth>0);
 
-    startGame({ planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs });
+    startGame({planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs});
   })();
 
   function startGame({planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs}){
-    const canvas = document.getElementById('gameCanvas'),
-          ctx    = canvas.getContext('2d');
+    const canvas=document.getElementById('gameCanvas'),
+          ctx=canvas.getContext('2d');
 
     let plane, obstacles, score, frameCount;
     let started, gameOver, showCountdown, countdownStart, bgOffset;
 
     function initGame(){
+      const planeW = 2160*0.10;
+      const planeH = planeW*(planeImg.naturalHeight/planeImg.naturalWidth);
       plane = {
-        x: 2160*0.2, y: 3840*0.5,
-        width: 2160*0.10, height: 3840*0.065,
+        x:2160*0.2,
+        y:3840*0.5-planeH/2,
+        width:planeW,
+        height:planeH,
         gravity:0.2, lift:-10, vel:0
       };
       obstacles     = [];
@@ -92,7 +89,6 @@
       showCountdown = false;
       countdownStart= 0;
       bgOffset      = 0;
-      // two initial, staggered
       spawnObstacle();
       obstacles[0].x += 2160*0.5;
       spawnObstacle();
@@ -130,156 +126,128 @@
     }
 
     function drawBackground(){
-      const tw = skyImg.naturalWidth * (3840/skyImg.naturalHeight);
-      bgOffset = (bgOffset - 1) % tw;
-      if(bgOffset>0) bgOffset -= tw;
-      const x0 = Math.floor(bgOffset);
-      ctx.save(); ctx.shadowBlur=0;
-      for(let x=x0-tw; x<2160; x+=tw){
+      const tw = skyImg.naturalWidth*(3840/skyImg.naturalHeight);
+      bgOffset = (bgOffset-1)%tw; if(bgOffset>0) bgOffset-=tw;
+      const x0=Math.floor(bgOffset);
+      ctx.save();ctx.shadowBlur=0;
+      for(let x=x0-tw;x<2160;x+=tw){
         ctx.drawImage(skyImg,
-          0,0, skyImg.naturalWidth, skyImg.naturalHeight,
-          x,0, tw,3840
+          0,0,skyImg.naturalWidth,skyImg.naturalHeight,
+          x,0,tw,3840
         );
       }
       ctx.restore();
     }
 
     function drawPlane(){
-      ctx.drawImage(planeImg, plane.x, plane.y, plane.width, plane.height);
+      ctx.drawImage(planeImg,plane.x,plane.y,plane.width,plane.height);
     }
 
     function spawnObstacle(){
-      const H        = 3840,
-            gap      = H*GAP,
-            m        = H*0.10,
-            topY     = Math.random()*(H-gap-2*m)+m,
-            bottomH  = H-(topY+gap),
-            topImg   = topImgs[Math.floor(Math.random()*topImgs.length)],
-            bottomImg= bottomImgs[Math.floor(Math.random()*bottomImgs.length)];
-
-      obstacles.push({ x:2160+60, topY, gap, bottomH, topImg, bottomImg, scored:false });
+      const H=3840, gap=H*GAP, m=H*0.10;
+      const topY=Math.random()*(H-gap-2*m)+m,
+            bottomH=H-(topY+gap),
+            topImg  = topImgs   [Math.floor(Math.random()*topImgs.length)],
+            botImg  = bottomImgs[Math.floor(Math.random()*bottomImgs.length)];
+      obstacles.push({x:2160+60,topY,gap,bottomH,topImg,bottomImg:botImg,scored:false});
     }
 
     function rectsIntersect(a,b){
-      return a.x < b.x + b.w &&
-             a.x + a.w > b.x &&
-             a.y < b.y + b.h &&
-             a.y + a.h > b.y;
+      return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;
     }
 
     function loop(){
       requestAnimationFrame(loop);
 
-      // background
       drawBackground();
 
-      // logo (inside canvas)
-      const logoW = 2160 * LOGO_SCALE,
-            logoH = logoW * (logoImg.naturalHeight/logoImg.naturalWidth),
-            logoX = 2160 - LOGO_MARGIN - logoW,
-            logoY = LOGO_MARGIN;
-      ctx.drawImage(logoImg, logoX, logoY, logoW, logoH);
+      // logo
+      const logoW=2160*LOGO_SCALE,
+            logoH=logoW*(logoImg.naturalHeight/logoImg.naturalWidth),
+            logoX=2160-LOGO_MARGIN-logoW,
+            logoY=LOGO_MARGIN;
+      ctx.drawImage(logoImg,logoX,logoY,logoW,logoH);
 
-      // Game Over
       if(gameOver){
-        drawText('Game Over', 2160/2, 3840*0.45, 128,'Gajraj One','center');
-        drawText(`Final Score: ${score}`,
-                 2160/2, 3840*0.70, 120,'Gajraj One','center');
+        drawText('Game Over',2160/2,3840*0.45,128,'Gajraj One','center');
+        drawText(`Final Score: ${score}`,2160/2,3840*0.70,120,'Gajraj One','center');
         return;
       }
 
-      // pre-start / countdown
       if(!started){
         if(showCountdown){
-          const t = (performance.now()-countdownStart)/1000,
-                n = t<3?Math.ceil(3-t):0;
-          drawText(n>0?String(n):'Go!', 2160/2, 3840/2, 200,'Gajraj One','center');
+          const t=(performance.now()-countdownStart)/1000,
+                n=t<3?Math.ceil(3-t):0;
+          drawText(n>0?String(n):'Go!',2160/2,3840/2,200,'Gajraj One','center');
           if(t>=3) started=true;
         } else {
-          drawText('Flappy Plane Game',
-                   2160/2, 3840*0.45, 150,'Gajraj One','center');
-          const phase = (performance.now()%5000)/5000*2*Math.PI,
-                alpha = 0.5+0.5*Math.sin(phase);
-          ctx.save(); ctx.globalAlpha=alpha;
-          const bw = 2160*0.15,
-                bh = bw*(buttonImg.naturalHeight/buttonImg.naturalWidth),
-                bx = (2160-bw)/2,
-                by = 3840*0.80 - bh/2;
+          drawText('Flappy Plane Game',2160/2,3840*0.45,150,'Gajraj One','center');
+          const phase=(performance.now()%5000)/5000*2*Math.PI,
+                alpha=0.5+0.5*Math.sin(phase);
+          ctx.save();ctx.globalAlpha=alpha;
+          const bw=2160*0.15,
+                bh=bw*(buttonImg.naturalHeight/buttonImg.naturalWidth),
+                bx=(2160-bw)/2,
+                by=3840*0.80-bh/2;
           ctx.drawImage(buttonImg,bx,by,bw,bh);
           ctx.restore();
-          drawText('Press button to start',
-                   2160/2, 3840*0.90, 120,'Gajraj One','center');
+          drawText('Press button to start',2160/2,3840*0.90,120,'Gajraj One','center');
         }
         return;
       }
 
-      // gameplay
-      plane.vel += plane.gravity;
-      plane.y   += plane.vel;
+      plane.vel+=plane.gravity;
+      plane.y+=plane.vel;
       drawPlane();
       if(plane.y<0||plane.y+plane.height>3840) gameOver=true;
 
-      // spawn interval
-      const interval = Math.max(
+      const interval=Math.max(
         MIN_SPAWN_RATE,
-        BASE_SPAWN_RATE - Math.floor(score/SPEEDUP_EVERY)*SPAWN_DECREMENT
+        BASE_SPAWN_RATE-Math.floor(score/SPEEDUP_EVERY)*SPAWN_DECREMENT
       );
-      if(frameCount>0 && frameCount%interval===0) spawnObstacle();
+      if(frameCount>0&&frameCount%interval===0) spawnObstacle();
 
-      // obstacles
       obstacles.forEach((o,i)=>{
-        const W = 2160*0.08,
-              speedFactor = BASE_SPEED + Math.floor(score/SPEEDUP_EVERY)*SPEED_UP_FACTOR;
-        o.x -= 2160 * speedFactor;
+        const W=2160*0.08,
+              speedF=BASE_SPEED+Math.floor(score/SPEEDUP_EVERY)*SPEED_UP_FACTOR;
+        o.x-=2160*speedF;
 
         // top
-        const hT = W*(o.topImg.naturalHeight/o.topImg.naturalWidth),
-              tX = o.x, tY = o.topY - hT;
+        const hT=W*(o.topImg.naturalHeight/o.topImg.naturalWidth),
+              tX=o.x, tY=o.topY-hT;
         if(o.topImg.naturalWidth) ctx.drawImage(o.topImg,tX,tY,W,hT);
-        const topRect = {
-          x:tX+W*TOP_COLLISION_INSET_X,
-          y:tY+hT*TOP_COLLISION_INSET_Y,
-          w:W-2*W*TOP_COLLISION_INSET_X,
-          h:hT-2*hT*TOP_COLLISION_INSET_Y
-        };
+        const topRect={ x:tX+W*TOP_INSET_X, y:tY+hT*TOP_INSET_Y,
+                        w:W-2*W*TOP_INSET_X, h:hT-2*hT*TOP_INSET_Y };
 
         // bottom
-        const bH = o.bottomH,
-              bW = bH*(o.bottomImg.naturalWidth/o.bottomImg.naturalHeight),
-              bX = o.x, bY = 3840 - bH;
+        const bH=o.bottomH,
+              bW=bH*(o.bottomImg.naturalWidth/o.bottomImg.naturalHeight),
+              bX=o.x, bY=3840-bH;
         if(o.bottomImg.naturalWidth) ctx.drawImage(o.bottomImg,bX,bY,bW,bH);
-        const botRect = {
-          x:bX+bW*BOT_COLLISION_INSET_X,
-          y:bY+bH*BOT_COLLISION_INSET_Y,
-          w:bW-2*bW*BOT_COLLISION_INSET_X,
-          h:bH-2*bH*BOT_COLLISION_INSET_Y
-        };
+        const botRect={ x:bX+bW*BOT_INSET_X, y:bY+bH*BOT_INSET_Y,
+                        w:bW-2*bW*BOT_INSET_X, h:bH-2*bH*BOT_INSET_Y };
 
         if(DEBUG_COLLISION){
-          ctx.save();
-          ctx.strokeStyle='red'; ctx.lineWidth=2;
+          ctx.save();ctx.strokeStyle='red';ctx.lineWidth=2;
           ctx.strokeRect(topRect.x,topRect.y,topRect.w,topRect.h);
           ctx.strokeRect(botRect.x,botRect.y,botRect.w,botRect.h);
           ctx.restore();
         }
 
-        if(!o.scored && o.x+W<plane.x){
-          score++; o.scored=true;
-        }
+        if(!o.scored&&o.x+W<plane.x){ score++; o.scored=true; }
 
-        const planeRect={x:plane.x,y:plane.y,w:plane.width,h:plane.height};
-        if(rectsIntersect(planeRect,topRect)||rectsIntersect(planeRect,botRect)){
-          gameOver=true;
-        }
+        const pr={x:plane.x,y:plane.y,w:plane.width,h:plane.height};
+        if(rectsIntersect(pr,topRect)||rectsIntersect(pr,botRect)){ gameOver=true; }
 
-        if(o.x+W<0) obstacles.splice(i,1);
+        // **fully scroll off-screen removal**
+        const maxW = Math.max(W, bW);
+        if(o.x + maxW < 0) obstacles.splice(i,1);
       });
 
-      // live score aligned with logo
-      const fs = Math.floor(3840*0.04);
+      // score
+      const fs=Math.floor(3840*0.04);
       drawText(`Score: ${score}`,
-               SCORE_MARGIN,
-               LOGO_MARGIN + fs,
+               SCORE_MARGIN, LOGO_MARGIN+fs,
                fs,'Gajraj One','left');
 
       frameCount++;
@@ -291,6 +259,3 @@
   </script>
 </body>
 </html>
-
-
-
