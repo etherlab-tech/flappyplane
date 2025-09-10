@@ -28,6 +28,7 @@
   const SCORE_MARGIN = 80;
   const TOP_INSET_X=0.15, TOP_INSET_Y=0.25, BOT_INSET_X=0.10, BOT_INSET_Y=0.20;
   const DEBUG_COLLISION=false;
+  const HOME_URL = "https://etherlab-tech.github.io/Interactive-Games-Home-Page/"; // <— set your homepage URL
 
   function loadImage(src){
     return new Promise(res=>{
@@ -39,37 +40,34 @@
   }
 
   (async()=>{
-    const [planeImg, skyImg, buttonImg, logoImg] = await Promise.all([
+    const [planeImg, skyImg, buttonImg, logoImg, homeImg] = await Promise.all([
       loadImage('./assets/plane-01.png'),
       loadImage('./assets/sky-01.png'),
       loadImage('./assets/button.png'),
-      loadImage('./assets/Logo-01.png')
+      loadImage('./assets/Logo-01.png'),
+      loadImage('./assets/home.png')  // NEW: home icon
     ]);
 
-    // only bottom1–3 now
-    const bottomPaths=[
-      './assets/bottom1.png',
-      './assets/bottom2.png',
-      './assets/bottom3.png'
-    ];
-    const topPaths=[
-      './assets/top1.png','./assets/top2.png','./assets/top3.png','./assets/top4.png'
-    ];
+    const bottomPaths=['./assets/bottom1.png','./assets/bottom2.png','./assets/bottom3.png'];
+    const topPaths   =['./assets/top1.png','./assets/top2.png','./assets/top3.png','./assets/top4.png'];
 
     const bottomAll = await Promise.all(bottomPaths.map(loadImage));
     const topAll    = await Promise.all(topPaths   .map(loadImage));
     const bottomImgs= bottomAll.filter(i=>i.naturalWidth>0);
     const topImgs   = topAll   .filter(i=>i.naturalWidth>0);
 
-    startGame({planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs});
+    startGame({planeImg, skyImg, buttonImg, logoImg, homeImg, bottomImgs, topImgs});
   })();
 
-  function startGame({planeImg, skyImg, buttonImg, logoImg, bottomImgs, topImgs}){
+  function startGame({planeImg, skyImg, buttonImg, logoImg, homeImg, bottomImgs, topImgs}){
     const canvas=document.getElementById('gameCanvas'),
           ctx=canvas.getContext('2d');
 
     let plane, obstacles, score, frameCount;
     let started, gameOver, showCountdown, countdownStart, bgOffset;
+
+    // home button rect (set each frame so click math is accurate)
+    let homeRect = {x:0,y:0,w:0,h:0};
 
     function initGame(){
       const planeW = 2160*0.10;
@@ -94,12 +92,28 @@
       spawnObstacle();
     }
 
+    // input
     document.addEventListener('keydown', e=>{
-      if(e.code==='Space') e.preventDefault();
-      handleTap();
+      if(e.code==='Space'){ e.preventDefault(); handleTapOrHome(e); }
     });
-    canvas.addEventListener('click', handleTap);
-    function handleTap(){
+    canvas.addEventListener('click', handleTapOrHome);
+
+    function handleTapOrHome(e){
+      // click coords (canvas space) for mouse events only
+      if(e && e.type==='click'){
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const my = (e.clientY - rect.top)  * (canvas.height / rect.height);
+
+        // home-button hit test
+        if(mx>=homeRect.x && mx<=homeRect.x+homeRect.w &&
+           my>=homeRect.y && my<=homeRect.y+homeRect.h){
+          if(HOME_URL && HOME_URL !== "https://etherlab-tech.github.io/Interactive-Games-Home-Page/") window.location.href = HOME_URL;
+          return;
+        }
+      }
+
+      // normal game tap
       if(!started && !showCountdown){
         showCountdown  = true;
         countdownStart = performance.now();
@@ -131,10 +145,7 @@
       const x0=Math.floor(bgOffset);
       ctx.save();ctx.shadowBlur=0;
       for(let x=x0-tw;x<2160;x+=tw){
-        ctx.drawImage(skyImg,
-          0,0,skyImg.naturalWidth,skyImg.naturalHeight,
-          x,0,tw,3840
-        );
+        ctx.drawImage(skyImg,0,0,skyImg.naturalWidth,skyImg.naturalHeight,x,0,tw,3840);
       }
       ctx.restore();
     }
@@ -168,6 +179,20 @@
             logoY=LOGO_MARGIN;
       ctx.drawImage(logoImg,logoX,logoY,logoW,logoH);
 
+      // HOME ICON (always visible)
+      const homeW = 2160 * 0.12;
+      const homeH = homeW * (homeImg.naturalHeight / homeImg.naturalWidth || 1);
+      const homeX = (2160 - homeW) / 2;
+      const homeY = 3840 - homeH - 80;
+      ctx.save();
+      // subtle pulse to feel clickable
+      const phase=(performance.now()%2000)/2000*2*Math.PI;
+      const alpha=0.85 + 0.15*Math.sin(phase);
+      ctx.globalAlpha=alpha;
+      ctx.drawImage(homeImg, homeX, homeY, homeW, homeH);
+      ctx.restore();
+      homeRect = {x:homeX, y:homeY, w:homeW, h:homeH};
+
       if(gameOver){
         drawText('Game Over',2160/2,3840*0.45,128,'Gajraj One','center');
         drawText(`Final Score: ${score}`,2160/2,3840*0.70,120,'Gajraj One','center');
@@ -196,17 +221,17 @@
         return;
       }
 
+      // physics
       plane.vel+=plane.gravity;
       plane.y+=plane.vel;
       drawPlane();
       if(plane.y<0||plane.y+plane.height>3840) gameOver=true;
 
-      const interval=Math.max(
-        MIN_SPAWN_RATE,
-        BASE_SPAWN_RATE-Math.floor(score/SPEEDUP_EVERY)*SPAWN_DECREMENT
-      );
+      // obstacle spawn
+      const interval=Math.max(MIN_SPAWN_RATE, BASE_SPAWN_RATE-Math.floor(score/SPEEDUP_EVERY)*SPAWN_DECREMENT);
       if(frameCount>0&&frameCount%interval===0) spawnObstacle();
 
+      // obstacles
       obstacles.forEach((o,i)=>{
         const W=2160*0.08,
               speedF=BASE_SPEED+Math.floor(score/SPEEDUP_EVERY)*SPEED_UP_FACTOR;
@@ -239,16 +264,14 @@
         const pr={x:plane.x,y:plane.y,w:plane.width,h:plane.height};
         if(rectsIntersect(pr,topRect)||rectsIntersect(pr,botRect)){ gameOver=true; }
 
-        // **fully scroll off-screen removal**
+        // cleanup when fully off-screen
         const maxW = Math.max(W, bW);
         if(o.x + maxW < 0) obstacles.splice(i,1);
       });
 
       // score
       const fs=Math.floor(3840*0.04);
-      drawText(`Score: ${score}`,
-               SCORE_MARGIN, LOGO_MARGIN+fs,
-               fs,'Gajraj One','left');
+      drawText(`Score: ${score}`, SCORE_MARGIN, LOGO_MARGIN+fs, fs,'Gajraj One','left');
 
       frameCount++;
     }
