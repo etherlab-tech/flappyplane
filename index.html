@@ -18,7 +18,7 @@
   </div>
 
   <script>
-  // —— CONFIG —— 
+  // —— CONFIG ——
   const BASE_SPEED       = 0.0035;
   const SPEED_UP_FACTOR  = 0.0005;
   const SPEEDUP_EVERY    = 2;
@@ -28,7 +28,7 @@
   const SCORE_MARGIN = 80;
   const TOP_INSET_X=0.15, TOP_INSET_Y=0.25, BOT_INSET_X=0.10, BOT_INSET_Y=0.20;
   const DEBUG_COLLISION=false;
-  const HOME_URL = "https://etherlab-tech.github.io/Interactive-Games-Home-Page/"; // <— set your homepage URL
+  const HOME_URL = "https://etherlab-tech.github.io/Interactive-Games-Home-Page/";
 
   function loadImage(src){
     return new Promise(res=>{
@@ -45,7 +45,7 @@
       loadImage('./assets/sky-01.png'),
       loadImage('./assets/button.png'),
       loadImage('./assets/Logo-01.png'),
-      loadImage('./assets/home.png')  // NEW: home icon
+      loadImage('./assets/home.png')
     ]);
 
     const bottomPaths=['./assets/bottom1.png','./assets/bottom2.png','./assets/bottom3.png'];
@@ -66,30 +66,15 @@
     let plane, obstacles, score, frameCount;
     let started, gameOver, showCountdown, countdownStart, bgOffset;
 
-    // home button rect (set each frame so click math is accurate)
     let homeRect = {x:0,y:0,w:0,h:0};
 
     function initGame(){
       const planeW = 2160*0.10;
       const planeH = planeW*(planeImg.naturalHeight/planeImg.naturalWidth);
-      plane = {
-        x:2160*0.2,
-        y:3840*0.5-planeH/2,
-        width:planeW,
-        height:planeH,
-        gravity:0.2, lift:-10, vel:0
-      };
-      obstacles     = [];
-      score         = 0;
-      frameCount    = 0;
-      started       = false;
-      gameOver      = false;
-      showCountdown = false;
-      countdownStart= 0;
-      bgOffset      = 0;
-      spawnObstacle();
-      obstacles[0].x += 2160*0.5;
-      spawnObstacle();
+      plane = { x:2160*0.2, y:3840*0.5-planeH/2, width:planeW, height:planeH, gravity:0.2, lift:-10, vel:0 };
+      obstacles=[]; score=0; frameCount=0;
+      started=false; gameOver=false; showCountdown=false; countdownStart=0; bgOffset=0;
+      spawnObstacle(); obstacles[0].x += 2160*0.5; spawnObstacle();
     }
 
     // input
@@ -99,21 +84,18 @@
     canvas.addEventListener('click', handleTapOrHome);
 
     function handleTapOrHome(e){
-      // click coords (canvas space) for mouse events only
+      // mouse click: test Home icon
       if(e && e.type==='click'){
         const rect = canvas.getBoundingClientRect();
         const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
-        const my = (e.clientY - rect.top)  * (canvas.height / rect.height);
-
-        // home-button hit test
+        const my = (e.clientY - rect.top ) * (canvas.height / rect.height);
         if(mx>=homeRect.x && mx<=homeRect.x+homeRect.w &&
            my>=homeRect.y && my<=homeRect.y+homeRect.h){
-          if(HOME_URL && HOME_URL !== "https://etherlab-tech.github.io/Interactive-Games-Home-Page/") window.location.href = HOME_URL;
+          window.location.assign(HOME_URL);  // ← always navigate
           return;
         }
       }
-
-      // normal game tap
+      // game tap
       if(!started && !showCountdown){
         showCountdown  = true;
         countdownStart = performance.now();
@@ -150,9 +132,7 @@
       ctx.restore();
     }
 
-    function drawPlane(){
-      ctx.drawImage(planeImg,plane.x,plane.y,plane.width,plane.height);
-    }
+    function drawPlane(){ ctx.drawImage(planeImg,plane.x,plane.y,plane.width,plane.height); }
 
     function spawnObstacle(){
       const H=3840, gap=H*GAP, m=H*0.10;
@@ -185,7 +165,6 @@
       const homeX = (2160 - homeW) / 2;
       const homeY = 3840 - homeH - 80;
       ctx.save();
-      // subtle pulse to feel clickable
       const phase=(performance.now()%2000)/2000*2*Math.PI;
       const alpha=0.85 + 0.15*Math.sin(phase);
       ctx.globalAlpha=alpha;
@@ -227,7 +206,7 @@
       drawPlane();
       if(plane.y<0||plane.y+plane.height>3840) gameOver=true;
 
-      // obstacle spawn
+      // spawn
       const interval=Math.max(MIN_SPAWN_RATE, BASE_SPAWN_RATE-Math.floor(score/SPEEDUP_EVERY)*SPAWN_DECREMENT);
       if(frameCount>0&&frameCount%interval===0) spawnObstacle();
 
@@ -237,14 +216,12 @@
               speedF=BASE_SPEED+Math.floor(score/SPEEDUP_EVERY)*SPEED_UP_FACTOR;
         o.x-=2160*speedF;
 
-        // top
         const hT=W*(o.topImg.naturalHeight/o.topImg.naturalWidth),
               tX=o.x, tY=o.topY-hT;
         if(o.topImg.naturalWidth) ctx.drawImage(o.topImg,tX,tY,W,hT);
         const topRect={ x:tX+W*TOP_INSET_X, y:tY+hT*TOP_INSET_Y,
                         w:W-2*W*TOP_INSET_X, h:hT-2*hT*TOP_INSET_Y };
 
-        // bottom
         const bH=o.bottomH,
               bW=bH*(o.bottomImg.naturalWidth/o.bottomImg.naturalHeight),
               bX=o.x, bY=3840-bH;
@@ -264,7 +241,6 @@
         const pr={x:plane.x,y:plane.y,w:plane.width,h:plane.height};
         if(rectsIntersect(pr,topRect)||rectsIntersect(pr,botRect)){ gameOver=true; }
 
-        // cleanup when fully off-screen
         const maxW = Math.max(W, bW);
         if(o.x + maxW < 0) obstacles.splice(i,1);
       });
@@ -282,3 +258,4 @@
   </script>
 </body>
 </html>
+
